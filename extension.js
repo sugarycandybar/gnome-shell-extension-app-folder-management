@@ -385,12 +385,10 @@ export default class UngroupFolderExtension extends Extension {
         });
         overlay.child = icon;
 
-        Main.uiGroup.add_child(overlay);
+        appIcon.add_child(overlay);
 
         const updatePos = () => {
-            const [x, y] = appIcon.get_transformed_position();
-            const [w, h] = appIcon.get_transformed_size();
-            overlay.set_position(x + w - 30, y + 2);
+            overlay.set_position(appIcon.get_width() - 30, 2);
             overlay.set_size(24, 24);
         };
 
