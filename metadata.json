@@ -1,7 +1,7 @@
 {
-  "name": "Folder Management",
-  "description": "Adds 'Ungroup Folder' to the right-click context menu of folders in the app grid",
-  "uuid": "folder-management@sugarycandybar",
+  "name": "App Folder Management",
+  "description": "Adds easy app overview folder management",
+  "uuid": "app-folder-management@sugarycandybar.github.io",
   "shell-version": ["50"],
   "version": 1
 }
