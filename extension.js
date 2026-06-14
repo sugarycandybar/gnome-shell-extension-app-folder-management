@@ -372,24 +372,24 @@ export default class UngroupFolderExtension extends Extension {
 
         const overlay = new St.Bin({
             reactive: false,
-            style: 'background-color: rgba(0, 0, 0, 0.45); ' +
-                'border: 2px solid rgba(255, 255, 255, 0.8); ' +
-                'border-radius: 50%; ' +
-                'min-width: 24px; min-height: 24px;',
+            style: 'background-color: -st-accent-color; ' +
+                'border-radius: 999px; ' +
+                'min-width: 22px; min-height: 22px; ' +
+                'box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);',
         });
 
         const icon = new St.Icon({
             icon_name: 'object-select-symbolic',
-            style: 'color: white; padding: 2px;',
-            icon_size: 16,
+            style: 'color: -st-accent-fg-color; padding: 3px;',
+            icon_size: 14,
         });
         overlay.child = icon;
 
         appIcon.add_child(overlay);
 
         const updatePos = () => {
-            overlay.set_position(appIcon.get_width() - 30, 2);
-            overlay.set_size(24, 24);
+            overlay.set_position(appIcon.get_width() - 28, 4);
+            overlay.set_size(22, 22);
         };
 
         updatePos();
