@@ -132,22 +132,26 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
 export default class UngroupFolderExtension extends Extension {
     enable() {
         this._origInit = FolderIcon.prototype._init;
+        this._origPopupMenu = FolderIcon.prototype.popupMenu;
+        this._origOnPoppedDown = FolderIcon.prototype._onFolderMenuPoppedDown;
         this._selectMode = false;
         this._appDisplay = null;
         this._selectedApps = new Set();
         this._checkOverlays = new Map();
         this._emptySpaceAnchor = null;
+        this._folderIconSignals = new Map();
 
         const self = this;
         FolderIcon.prototype._init = function (id, path, parentView) {
             self._origInit.call(this, id, path, parentView);
 
-            this.connect('popup-menu', () => {
+            const handlerId = this.connect('popup-menu', () => {
                 this.popupMenu();
                 if (this._menu)
                     this._menu.actor.navigate_focus(
                         null, St.DirectionType.TAB_FORWARD, false);
             });
+            self._folderIconSignals.set(this, handlerId);
         };
 
         FolderIcon.prototype.popupMenu = function () {
@@ -511,9 +515,29 @@ export default class UngroupFolderExtension extends Extension {
     }
 
     disable() {
+        for (const [icon, handlerId] of this._folderIconSignals) {
+            if (icon._menu) {
+                icon._menu.actor.destroy();
+                icon._menu = null;
+                icon._menuManager = null;
+            }
+            try {
+                icon.disconnect(handlerId);
+            } catch (e) {}
+        }
+        this._folderIconSignals.clear();
+
         FolderIcon.prototype._init = this._origInit;
-        FolderIcon.prototype.popupMenu = function () {};
-        FolderIcon.prototype._onFolderMenuPoppedDown = function () {};
+
+        if (this._origPopupMenu)
+            FolderIcon.prototype.popupMenu = this._origPopupMenu;
+        else
+            delete FolderIcon.prototype.popupMenu;
+
+        if (this._origOnPoppedDown)
+            FolderIcon.prototype._onFolderMenuPoppedDown = this._origOnPoppedDown;
+        else
+            delete FolderIcon.prototype._onFolderMenuPoppedDown;
 
         if (this._stageHandlerId) {
             global.stage.disconnect(this._stageHandlerId);
