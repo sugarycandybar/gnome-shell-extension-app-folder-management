@@ -186,7 +186,7 @@ export default class UngroupFolderExtension extends Extension {
         });
 
         this._groupButton = new St.Button({
-            label: _('Group into Folder'),
+            label: _('New folder'),
             style_class: 'button',
             track_hover: true,
             reactive: false,
@@ -302,7 +302,7 @@ export default class UngroupFolderExtension extends Extension {
     }
 
     _positionSelectBar() {
-        const barWidth = 420;
+        const barWidth = 500;
         const stageWidth = global.stage.get_width();
         const stageHeight = global.stage.get_height();
         this._selectBar.set_size(barWidth, -1);
