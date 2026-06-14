@@ -131,8 +131,6 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
 
 export default class UngroupFolderExtension extends Extension {
     enable() {
-        log('fm: enable');
-
         this._origInit = FolderIcon.prototype._init;
         this._selectMode = false;
         this._appDisplay = null;
@@ -192,7 +190,6 @@ export default class UngroupFolderExtension extends Extension {
             reactive: false,
         });
         this._groupButton.connect('clicked', () => {
-            log('fm: group button clicked');
             this._groupSelected();
         });
 
@@ -254,8 +251,6 @@ export default class UngroupFolderExtension extends Extension {
                 let target = global.stage.get_event_actor(event);
                 if (!target)
                     return Clutter.EVENT_PROPAGATE;
-
-                log(`fm: right-click target=${target}`);
 
                 let folderIcon = null;
                 let hasAppIcon = false;
@@ -356,8 +351,6 @@ export default class UngroupFolderExtension extends Extension {
         if (!appId)
             return;
 
-        log(`fm: _toggleApp ${appId}, was selected=${this._selectedApps.has(appId)}`);
-
         if (!this._appDisplay)
             this._findAppDisplayFromIcon(appIcon);
 
@@ -371,7 +364,6 @@ export default class UngroupFolderExtension extends Extension {
             this._addCheckOverlay(appIcon, appId);
         }
 
-        log(`fm: selected size=${this._selectedApps.size}, button reactive=${this._selectedApps.size >= 1}`);
         this._groupButton.reactive = this._selectedApps.size >= 1;
         this._selectCountLabel.text = ngettext('Selected %d app', 'Selected %d apps', this._selectedApps.size).format(this._selectedApps.size);
     }
@@ -420,23 +412,15 @@ export default class UngroupFolderExtension extends Extension {
     }
 
     _groupSelected() {
-        log(`fm: _groupSelected, selected size=${this._selectedApps.size}`);
-
-        if (this._selectedApps.size < 1) {
-            log('fm: not enough selected');
+        if (this._selectedApps.size < 1)
             return;
-        }
 
         const appDisplay = this._getAppDisplay();
-        log(`fm: appDisplay=${!!appDisplay}`);
 
-        if (!appDisplay) {
-            log('fm: no appDisplay');
+        if (!appDisplay)
             return;
-        }
 
         const appIds = [...this._selectedApps];
-        log(`fm: appIds=${JSON.stringify(appIds)}`);
 
         const appIcons = [];
         for (const appId of appIds) {

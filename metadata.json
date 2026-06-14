@@ -1,7 +1,7 @@
 {
   "name": "App Folder Management",
-  "description": "Adds easy app overview folder management",
+  "description": "Adds easy app grid folder management",
   "uuid": "app-folder-management@sugarycandybar.github.io",
-  "shell-version": ["50"],
-  "version": 1
+  "url": "https://github.com/sugarycandybar/app-folder-management",
+  "shell-version": ["50"]
 }
