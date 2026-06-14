@@ -17,13 +17,15 @@ const CASCADE_DURATION = 350;
 const FOLDER_FADE_DURATION = 200;
 
 class FolderPopupMenu extends PopupMenu.PopupMenu {
-    constructor(sourceActor) {
+    constructor(sourceActor, extension) {
         let side = St.Side.LEFT;
         if (Clutter.get_default_text_direction() === Clutter.TextDirection.RTL)
             side = St.Side.RIGHT;
 
         super(sourceActor, 0.5, side);
         this.actor.add_style_class_name('app-menu');
+
+        this._extension = extension;
 
         this.addAction(_('Ungroup Folder'), () => {
             this._ungroup();
@@ -40,7 +42,25 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
 
         this.close();
 
+        if (!this._extension._enabled)
+            return;
+
+        const _removeFolderFromList = () => {
+            const settings = new Gio.Settings({
+                schema_id: 'org.gnome.desktop.app-folders',
+            });
+            const folders = settings.get_strv('folder-children');
+            const idx = folders.indexOf(folderId);
+            if (idx >= 0) {
+                folders.splice(idx, 1);
+                settings.set_strv('folder-children', folders);
+            }
+        };
+
         const onAnimDone = () => {
+            if (!this._extension._enabled)
+                return;
+
             let folderPage = 0;
             const folderPos = parentView._pageManager.getAppPosition(folderId);
             if (folderPos[0] >= 0)
@@ -49,6 +69,9 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
             let viewLoadedId = 0;
             viewLoadedId = parentView.connect('view-loaded', () => {
                 parentView.disconnect(viewLoadedId);
+
+                if (!this._extension._enabled)
+                    return;
 
                 const existingCount = parentView._grid.getItemsAtPage(folderPage)
                     .filter(c => c.visible).length;
@@ -90,22 +113,16 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
                 duration: FOLDER_FADE_DURATION,
                 mode: Clutter.AnimationMode.EASE_OUT_QUINT,
                 onComplete: () => {
+                    if (!this._extension._enabled)
+                        return;
+
                     folderSettings.reset('apps');
                     folderSettings.reset('categories');
                     folderSettings.reset('excluded-apps');
                     folderSettings.reset('name');
                     folderSettings.reset('translate');
 
-                    const settings = new Gio.Settings({
-                        schema_id: 'org.gnome.desktop.app-folders',
-                    });
-                    const folders = settings.get_strv('folder-children');
-                    const idx = folders.indexOf(folderId);
-                    if (idx >= 0) {
-                        folders.splice(idx, 1);
-                        settings.set_strv('folder-children', folders);
-                    }
-
+                    _removeFolderFromList();
                     onAnimDone();
                 },
             });
@@ -114,16 +131,7 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
             for (const key of keys)
                 folderSettings.reset(key);
 
-            const settings = new Gio.Settings({
-                schema_id: 'org.gnome.desktop.app-folders',
-            });
-            const folders = settings.get_strv('folder-children');
-            const idx = folders.indexOf(folderId);
-            if (idx >= 0) {
-                folders.splice(idx, 1);
-                settings.set_strv('folder-children', folders);
-            }
-
+            _removeFolderFromList();
             onAnimDone();
         }
     }
@@ -140,6 +148,7 @@ export default class UngroupFolderExtension extends Extension {
         this._checkOverlays = new Map();
         this._emptySpaceAnchor = null;
         this._folderIconSignals = new Map();
+        this._enabled = true;
 
         const self = this;
         FolderIcon.prototype._init = function (id, path, parentView) {
@@ -156,16 +165,17 @@ export default class UngroupFolderExtension extends Extension {
 
         FolderIcon.prototype.popupMenu = function () {
             if (!this._menu) {
-                this._menu = new FolderPopupMenu(this);
+                this._menu = new FolderPopupMenu(this, self);
                 this._menu.connect('open-state-changed', (menu, open) => {
                     if (!open)
                         this._onFolderMenuPoppedDown();
                 });
-                Main.overview.connectObject('hiding',
-                    () => this._menu.close(), this);
                 Main.uiGroup.add_child(this._menu.actor);
                 this._menuManager = new PopupMenu.PopupMenuManager(this);
                 this._menuManager.addMenu(this._menu);
+
+                Main.overview.connectObject('hiding',
+                    () => this._menu.close(), this._menu);
             }
 
             this._menu.open(BoxPointer.PopupAnimation.FULL);
@@ -193,7 +203,7 @@ export default class UngroupFolderExtension extends Extension {
             track_hover: true,
             reactive: false,
         });
-        this._groupButton.connect('clicked', () => {
+        this._groupButtonClickedId = this._groupButton.connect('clicked', () => {
             this._groupSelected();
         });
 
@@ -202,7 +212,7 @@ export default class UngroupFolderExtension extends Extension {
             style_class: 'button',
             track_hover: true,
         });
-        this._cancelButton.connect('clicked', () => this._exitSelectMode());
+        this._cancelButtonClickedId = this._cancelButton.connect('clicked', () => this._exitSelectMode());
 
         this._selectBar.add_child(this._selectCountLabel);
         this._selectBar.add_child(new St.Widget({x_expand: true}));
@@ -436,19 +446,22 @@ export default class UngroupFolderExtension extends Extension {
         for (const appId of appIds)
             this._removeCheckOverlay(appId);
 
+        const self = this;
         const onAnimDone = () => {
+            if (!self._enabled)
+                return;
+
             for (const icon of appIcons) {
                 icon.set_scale(1, 1);
                 icon.opacity = 255;
             }
 
-            this._exitSelectMode();
+            self._exitSelectMode();
 
             try {
                 appDisplay.createFolder(appIds);
             } catch (e) {
-                log(`fm: createFolder error: ${e}`);
-                log(e.stack);
+                self.log(`createFolder error: ${e}`);
             }
         };
 
@@ -515,7 +528,11 @@ export default class UngroupFolderExtension extends Extension {
     }
 
     disable() {
+        this._enabled = false;
+
         for (const [icon, handlerId] of this._folderIconSignals) {
+            Main.overview.disconnectObject(icon);
+
             if (icon._menu) {
                 icon._menu.actor.destroy();
                 icon._menu = null;
@@ -555,6 +572,15 @@ export default class UngroupFolderExtension extends Extension {
         this._exitSelectMode();
         for (const appId of this._checkOverlays.keys())
             this._removeCheckOverlay(appId);
+
+        if (this._groupButton && this._groupButtonClickedId) {
+            this._groupButton.disconnect(this._groupButtonClickedId);
+            this._groupButtonClickedId = 0;
+        }
+        if (this._cancelButton && this._cancelButtonClickedId) {
+            this._cancelButton.disconnect(this._cancelButtonClickedId);
+            this._cancelButtonClickedId = 0;
+        }
 
         if (this._selectBar) {
             this._selectBar.destroy();
