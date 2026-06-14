@@ -7,7 +7,7 @@ import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
-import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {Extension, gettext as _, ngettext} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const FolderIcon = AppDisplay.FolderIcon;
 const AppIcon = AppDisplay.AppIcon;
@@ -173,11 +173,16 @@ export default class UngroupFolderExtension extends Extension {
         };
 
         this._selectBar = new St.BoxLayout({
-            style: 'background-color: rgba(0, 0, 0, 0.65); border-radius: 10px; ' +
-                'padding-top: 5px; padding-bottom: 5px; ' +
-                'padding-left: 8px; padding-right: 8px; spacing: 8px;',
+            style: 'background-color: rgba(0, 0, 0, 0.7); border-radius: 12px; ' +
+                'padding: 8px 16px; spacing: 12px;',
             visible: false,
             reactive: true,
+        });
+
+        this._selectCountLabel = new St.Label({
+            text: '',
+            style: 'color: white; font-weight: bold;',
+            y_align: Clutter.ActorAlign.CENTER,
         });
 
         this._groupButton = new St.Button({
@@ -198,6 +203,8 @@ export default class UngroupFolderExtension extends Extension {
         });
         this._cancelButton.connect('clicked', () => this._exitSelectMode());
 
+        this._selectBar.add_child(this._selectCountLabel);
+        this._selectBar.add_child(new St.Widget({x_expand: true}));
         this._selectBar.add_child(this._groupButton);
         this._selectBar.add_child(this._cancelButton);
         Main.uiGroup.add_child(this._selectBar);
@@ -223,16 +230,11 @@ export default class UngroupFolderExtension extends Extension {
                 return Clutter.EVENT_PROPAGATE;
 
             let target = global.stage.get_event_actor(event);
-            if (!target) {
-                log('fm: captured-event no target');
+            if (!target)
                 return Clutter.EVENT_PROPAGATE;
-            }
-
-            log(`fm: captured-event target=${target}`);
 
             for (let icon = target; icon; icon = icon.get_parent()) {
                 if (icon instanceof AppIcon) {
-                    log(`fm: captured-event found AppIcon`);
                     this._toggleApp(icon);
                     return Clutter.EVENT_STOP;
                 }
@@ -300,34 +302,22 @@ export default class UngroupFolderExtension extends Extension {
     }
 
     _positionSelectBar() {
-        const barWidth = 320;
-        const barHeight = 40;
-        const margin = 6;
-
-        let y;
-        const dash = Main.overview?.controls?.dash;
-        if (dash) {
-            const [, dashY] = dash.get_transformed_position();
-            const [, dashH] = dash.get_transformed_size();
-            if (dashY > 0 && dashH > 0)
-                y = dashY - barHeight - margin;
-        }
-        if (y === undefined) {
-            const stageHeight = global.stage.get_height();
-            y = stageHeight - 200 - barHeight;
-        }
-
+        const barWidth = 420;
         const stageWidth = global.stage.get_width();
+        const stageHeight = global.stage.get_height();
+        this._selectBar.set_size(barWidth, -1);
+        const [, nath] = this._selectBar.get_preferred_height(barWidth);
+        this._selectBar.set_size(barWidth, nath);
         this._selectBar.set_position(
             Math.round((stageWidth - barWidth) / 2),
-            y);
-        this._selectBar.set_size(barWidth, barHeight);
+            stageHeight - 150 - nath);
     }
 
     _enterSelectMode() {
         this._selectMode = true;
         this._selectedApps.clear();
         this._groupButton.reactive = false;
+        this._selectCountLabel.text = '';
         this._positionSelectBar();
         this._selectBar.set_opacity(0);
         this._selectBar.set_translation(0, 12, 0);
@@ -378,8 +368,9 @@ export default class UngroupFolderExtension extends Extension {
             this._addCheckOverlay(appIcon, appId);
         }
 
-        log(`fm: selected size=${this._selectedApps.size}, button reactive=${this._selectedApps.size >= 2}`);
-        this._groupButton.reactive = this._selectedApps.size >= 2;
+        log(`fm: selected size=${this._selectedApps.size}, button reactive=${this._selectedApps.size >= 1}`);
+        this._groupButton.reactive = this._selectedApps.size >= 1;
+        this._selectCountLabel.text = ngettext('Selected %d app', 'Selected %d apps', this._selectedApps.size).format(this._selectedApps.size);
     }
 
     _addCheckOverlay(appIcon, appId) {
@@ -390,38 +381,29 @@ export default class UngroupFolderExtension extends Extension {
             reactive: false,
             style: 'background-color: -st-accent-color; ' +
                 'border-radius: 999px; ' +
-                'min-width: 26px; min-height: 26px; ' +
                 'box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
         });
+        overlay.set_size(26, 26);
 
         const icon = new St.Icon({
             icon_name: 'object-select-symbolic',
-            style: 'color: -st-accent-fg-color; padding: 4px;',
+            style: 'color: -st-accent-fg-color;',
             icon_size: 16,
         });
         overlay.child = icon;
 
         appIcon.add_child(overlay);
 
-        overlay.set_scale(0, 0);
         overlay.set_opacity(0);
         overlay.ease({
-            scale_x: 1,
-            scale_y: 1,
             opacity: 255,
-            duration: 250,
-            mode: Clutter.AnimationMode.EASE_OUT_BACK,
+            duration: 180,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
 
-        const updatePos = () => {
-            overlay.set_position(appIcon.get_width() - 34, 2);
-            overlay.set_size(26, 26);
-        };
-
-        updatePos();
-        const allocId = appIcon.connect('notify::allocation', updatePos);
-
-        this._checkOverlays.set(appId, {overlay, allocId, updatePos, appIcon});
+        this._checkOverlays.set(appId, {overlay, appIcon});
     }
 
     _removeCheckOverlay(appId) {
@@ -437,7 +419,7 @@ export default class UngroupFolderExtension extends Extension {
     _groupSelected() {
         log(`fm: _groupSelected, selected size=${this._selectedApps.size}`);
 
-        if (this._selectedApps.size < 2) {
+        if (this._selectedApps.size < 1) {
             log('fm: not enough selected');
             return;
         }
@@ -453,17 +435,51 @@ export default class UngroupFolderExtension extends Extension {
         const appIds = [...this._selectedApps];
         log(`fm: appIds=${JSON.stringify(appIds)}`);
 
-        for (const appId of this._checkOverlays.keys())
+        const appIcons = [];
+        for (const appId of appIds) {
+            const data = this._checkOverlays.get(appId);
+            if (data)
+                appIcons.push(data.appIcon);
+        }
+
+        for (const appId of appIds)
             this._removeCheckOverlay(appId);
 
-        this._exitSelectMode();
+        const onAnimDone = () => {
+            for (const icon of appIcons) {
+                icon.set_scale(1, 1);
+                icon.opacity = 255;
+            }
 
-        try {
-            const result = appDisplay.createFolder(appIds);
-            log(`fm: createFolder result=${result}`);
-        } catch (e) {
-            log(`fm: createFolder error: ${e}`);
-            log(e.stack);
+            this._exitSelectMode();
+
+            try {
+                appDisplay.createFolder(appIds);
+            } catch (e) {
+                log(`fm: createFolder error: ${e}`);
+                log(e.stack);
+            }
+        };
+
+        if (appIcons.length > 0) {
+            let completed = 0;
+            appIcons.forEach((icon, i) => {
+                icon.ease({
+                    scale_x: 0,
+                    scale_y: 0,
+                    opacity: 0,
+                    delay: i * 50,
+                    duration: 300,
+                    mode: Clutter.AnimationMode.EASE_OUT_QUINT,
+                    onComplete: () => {
+                        completed++;
+                        if (completed === appIcons.length)
+                            onAnimDone();
+                    },
+                });
+            });
+        } else {
+            onAnimDone();
         }
     }
 
