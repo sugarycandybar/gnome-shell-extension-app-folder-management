@@ -11,6 +11,10 @@ import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/ex
 
 const FolderIcon = AppDisplay.FolderIcon;
 
+const CASCADE_INTERVAL = 80;
+const CASCADE_DURATION = 350;
+const FOLDER_FADE_DURATION = 200;
+
 class FolderPopupMenu extends PopupMenu.PopupMenu {
     constructor(sourceActor) {
         let side = St.Side.LEFT;
@@ -30,22 +34,97 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
         const folderView = icon.view;
         const folderSettings = folderView._folder;
         const folderId = folderView._id;
-
-        const keys = folderSettings.settings_schema.list_keys();
-        for (const key of keys)
-            folderSettings.reset(key);
-
-        const settings = new Gio.Settings({
-            schema_id: 'org.gnome.desktop.app-folders',
-        });
-        const folders = settings.get_strv('folder-children');
-        const idx = folders.indexOf(folderId);
-        if (idx >= 0) {
-            folders.splice(idx, 1);
-            settings.set_strv('folder-children', folders);
-        }
+        const parentView = icon._parentView;
+        const appIds = icon.getAppIds();
 
         this.close();
+
+        const onAnimDone = () => {
+            let folderPage = 0;
+            const folderPos = parentView._pageManager.getAppPosition(folderId);
+            if (folderPos[0] >= 0)
+                folderPage = folderPos[0];
+
+            let viewLoadedId = 0;
+            viewLoadedId = parentView.connect('view-loaded', () => {
+                parentView.disconnect(viewLoadedId);
+
+                const existingCount = parentView._grid.getItemsAtPage(folderPage)
+                    .filter(c => c.visible).length;
+
+                appIds.forEach((appId, i) => {
+                    const appIcon = parentView._items.get(appId);
+                    if (!appIcon)
+                        return;
+
+                    parentView._moveItem(appIcon, folderPage, existingCount + i);
+                });
+
+                parentView._savePages();
+
+                appIds.forEach((appId, i) => {
+                    const appIcon = parentView._items.get(appId);
+                    if (!appIcon)
+                        return;
+
+                    appIcon.scale_x = 0;
+                    appIcon.scale_y = 0;
+
+                    appIcon.ease({
+                        scale_x: 1,
+                        scale_y: 1,
+                        delay: i * CASCADE_INTERVAL,
+                        duration: CASCADE_DURATION,
+                        mode: Clutter.AnimationMode.EASE_OUT_QUINT,
+                    });
+                });
+            });
+        };
+
+        if (icon.visible) {
+            icon.ease({
+                scale_x: 0,
+                scale_y: 0,
+                opacity: 0,
+                duration: FOLDER_FADE_DURATION,
+                mode: Clutter.AnimationMode.EASE_OUT_QUINT,
+                onComplete: () => {
+                    folderSettings.reset('apps');
+                    folderSettings.reset('categories');
+                    folderSettings.reset('excluded-apps');
+                    folderSettings.reset('name');
+                    folderSettings.reset('translate');
+
+                    const settings = new Gio.Settings({
+                        schema_id: 'org.gnome.desktop.app-folders',
+                    });
+                    const folders = settings.get_strv('folder-children');
+                    const idx = folders.indexOf(folderId);
+                    if (idx >= 0) {
+                        folders.splice(idx, 1);
+                        settings.set_strv('folder-children', folders);
+                    }
+
+                    onAnimDone();
+                },
+            });
+        } else {
+            const keys = folderSettings.settings_schema.list_keys();
+            for (const key of keys)
+                folderSettings.reset(key);
+
+            const settings = new Gio.Settings({
+                schema_id: 'org.gnome.desktop.app-folders',
+            });
+            const folders = settings.get_strv('folder-children');
+            const idx = folders.indexOf(folderId);
+            if (idx >= 0) {
+                folders.splice(idx, 1);
+                settings.set_strv('folder-children', folders);
+            }
+
+            onAnimDone();
+        }
     }
 }
 
