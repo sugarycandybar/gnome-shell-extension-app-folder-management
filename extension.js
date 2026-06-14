@@ -234,6 +234,10 @@ export default class UngroupFolderExtension extends Extension {
                 return Clutter.EVENT_PROPAGATE;
 
             for (let icon = target; icon; icon = icon.get_parent()) {
+                if (icon instanceof FolderIcon) {
+                    this._toggleFolderIcon(icon);
+                    return Clutter.EVENT_STOP;
+                }
                 if (icon instanceof AppIcon) {
                     this._toggleApp(icon);
                     return Clutter.EVENT_STOP;
@@ -370,7 +374,10 @@ export default class UngroupFolderExtension extends Extension {
 
         log(`fm: selected size=${this._selectedApps.size}, button reactive=${this._selectedApps.size >= 1}`);
         this._groupButton.reactive = this._selectedApps.size >= 1;
-        this._selectCountLabel.text = ngettext('Selected %d app', 'Selected %d apps', this._selectedApps.size).format(this._selectedApps.size);
+        this._selectCountLabel.text = this._selectedApps.size > 0
+            ? ngettext('Selected %d app', 'Selected %d apps', this._selectedApps.size).format(this._selectedApps.size)
+            : '';
+        this._selectCountLabel.visible = this._selectedApps.size > 0;
     }
 
     _addCheckOverlay(appIcon, appId) {
@@ -414,6 +421,58 @@ export default class UngroupFolderExtension extends Extension {
         data.appIcon.setForcedHighlight(false);
         data.overlay.destroy();
         this._checkOverlays.delete(appId);
+    }
+
+    _toggleFolderIcon(folderIcon) {
+        log(`fm: _toggleFolderIcon folder=${folderIcon} folder.folder=${folderIcon.folder}`);
+        const appIds = folderIcon.folder ? folderIcon.folder._appIds : null;
+        log(`fm:   appIds=${JSON.stringify(appIds)}`);
+        if (!appIds || appIds.length === 0)
+            return;
+
+        const allSelected = appIds.every(id => this._selectedApps.has(id));
+        log(`fm:   allSelected=${allSelected}`);
+
+        if (allSelected) {
+            for (const appId of appIds) {
+                const data = this._checkOverlays.get(appId);
+                log(`fm:   deselect appId=${appId} hasData=${!!data}`);
+                if (data)
+                    this._toggleApp(data.appIcon);
+            }
+        } else {
+            for (const appId of appIds) {
+                if (!this._selectedApps.has(appId)) {
+                    const appIcon = this._findAppIconByAppId(appId);
+                    log(`fm:   select appId=${appId} found=${!!appIcon}`);
+                    if (appIcon)
+                        this._toggleApp(appIcon);
+                }
+            }
+        }
+    }
+
+    _findAppIconByAppId(appId) {
+        const data = this._checkOverlays.get(appId);
+        if (data)
+            return data.appIcon;
+        return this._searchAppIconById(global.stage, appId);
+    }
+
+    _searchAppIconById(root, appId) {
+        if (root instanceof AppIcon && root.id === appId)
+            return root;
+        let children = null;
+        try {
+            children = root.get_children();
+        } catch (e) {
+            return null;
+        }
+        for (let i = 0; i < children.length; i++) {
+            const found = this._searchAppIconById(children[i], appId);
+            if (found) return found;
+        }
+        return null;
     }
 
     _groupSelected() {
