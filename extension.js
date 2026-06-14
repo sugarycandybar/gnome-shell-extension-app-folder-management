@@ -175,7 +175,7 @@ export default class UngroupFolderExtension extends Extension {
         this._selectBar = new St.BoxLayout({
             style: 'background-color: rgba(0, 0, 0, 0.65); border-radius: 10px; ' +
                 'padding-top: 5px; padding-bottom: 5px; ' +
-                'padding-left: 8px; padding-right: 8px;',
+                'padding-left: 8px; padding-right: 8px; spacing: 8px;',
             visible: false,
             reactive: true,
         });
@@ -185,7 +185,6 @@ export default class UngroupFolderExtension extends Extension {
             style_class: 'button',
             track_hover: true,
             reactive: false,
-            style: 'margin-right: 8px;',
         });
         this._groupButton.connect('clicked', () => {
             log('fm: group button clicked');
@@ -303,7 +302,7 @@ export default class UngroupFolderExtension extends Extension {
     _positionSelectBar() {
         const barWidth = 320;
         const barHeight = 40;
-        const margin = 16;
+        const margin = 6;
 
         let y;
         const dash = Main.overview?.controls?.dash;
@@ -328,15 +327,32 @@ export default class UngroupFolderExtension extends Extension {
     _enterSelectMode() {
         this._selectMode = true;
         this._selectedApps.clear();
-        this._selectBar.show();
         this._groupButton.reactive = false;
         this._positionSelectBar();
+        this._selectBar.set_opacity(0);
+        this._selectBar.set_translation(0, 12, 0);
+        this._selectBar.show();
+        this._selectBar.ease({
+            opacity: 255,
+            translation_y: 0,
+            duration: 200,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
     }
 
     _exitSelectMode() {
         this._selectMode = false;
         this._selectedApps.clear();
-        this._selectBar.hide();
+
+        this._selectBar.ease({
+            opacity: 0,
+            translation_y: 12,
+            duration: 150,
+            mode: Clutter.AnimationMode.EASE_IN_QUAD,
+            onComplete: () => {
+                this._selectBar.hide();
+            },
+        });
 
         for (const appId of this._checkOverlays.keys())
             this._removeCheckOverlay(appId);
@@ -374,22 +390,32 @@ export default class UngroupFolderExtension extends Extension {
             reactive: false,
             style: 'background-color: -st-accent-color; ' +
                 'border-radius: 999px; ' +
-                'min-width: 22px; min-height: 22px; ' +
-                'box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);',
+                'min-width: 26px; min-height: 26px; ' +
+                'box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);',
         });
 
         const icon = new St.Icon({
             icon_name: 'object-select-symbolic',
-            style: 'color: -st-accent-fg-color; padding: 3px;',
-            icon_size: 14,
+            style: 'color: -st-accent-fg-color; padding: 4px;',
+            icon_size: 16,
         });
         overlay.child = icon;
 
         appIcon.add_child(overlay);
 
+        overlay.set_scale(0, 0);
+        overlay.set_opacity(0);
+        overlay.ease({
+            scale_x: 1,
+            scale_y: 1,
+            opacity: 255,
+            duration: 250,
+            mode: Clutter.AnimationMode.EASE_OUT_BACK,
+        });
+
         const updatePos = () => {
-            overlay.set_position(appIcon.get_width() - 28, 4);
-            overlay.set_size(22, 22);
+            overlay.set_position(appIcon.get_width() - 34, 2);
+            overlay.set_size(26, 26);
         };
 
         updatePos();
