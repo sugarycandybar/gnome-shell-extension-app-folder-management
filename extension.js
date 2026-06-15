@@ -541,24 +541,18 @@ export default class UngroupFolderExtension extends Extension {
         this._enabled = false;
 
         for (const [icon, handlerId] of this._folderIconSignals) {
-            Main.overview.disconnectObject(icon);
-
             if (icon._menu) {
+                Main.overview.disconnectObject(icon._menu);
                 icon._menu.actor.destroy();
                 icon._menu = null;
                 icon._menuManager = null;
             }
-            try {
-                icon.disconnect(handlerId);
-            } catch (e) {}
+            icon.disconnect(handlerId);
         }
         this._folderIconSignals.clear();
 
-        for (const [parentView, handlerId] of this._viewLoadedConnections) {
-            try {
-                parentView.disconnect(handlerId);
-            } catch (e) {}
-        }
+        for (const [parentView, handlerId] of this._viewLoadedConnections)
+            parentView.disconnect(handlerId);
         this._viewLoadedConnections.clear();
 
         FolderIcon.prototype._init = this._origInit;
