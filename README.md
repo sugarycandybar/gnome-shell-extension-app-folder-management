@@ -36,7 +36,7 @@ gnome-extensions enable app-folder-management@sugarycandybar.github.io
 
 ## Compatibility
 
-- GNOME Shell 50
+- GNOME Shell 45 – 50
 
 ## License
 

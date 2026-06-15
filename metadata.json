@@ -3,5 +3,5 @@
   "description": "Adds easy app folder management directly from the app grid.\n\nRight-click any folder to ungroup it, or right-click empty grid space to select multiple apps and create a new folder.",
   "uuid": "app-folder-management@sugarycandybar.github.io",
   "url": "https://github.com/sugarycandybar/gnome-shell-extension-app-folder-management",
-  "shell-version": ["50"]
+  "shell-version": ["45", "46", "47", "48", "49", "50"]
 }
