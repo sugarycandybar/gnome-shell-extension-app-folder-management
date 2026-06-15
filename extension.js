@@ -647,6 +647,9 @@ export default class UngroupFolderExtension extends Extension {
             this._selectBar.destroy();
             this._selectBar = null;
         }
+        this._selectCountLabel = null;
+        this._groupButton = null;
+        this._cancelButton = null;
 
         if (this._dashAllocId && Main.overview?.controls?.dash) {
             Main.overview.controls.dash.disconnect(this._dashAllocId);
