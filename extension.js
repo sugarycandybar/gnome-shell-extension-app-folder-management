@@ -66,9 +66,18 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
             if (folderPos[0] >= 0)
                 folderPage = folderPos[0];
 
-            let viewLoadedId = 0;
-            viewLoadedId = parentView.connect('view-loaded', () => {
-                parentView.disconnect(viewLoadedId);
+            if (this._extension._viewLoadedConnections.has(parentView)) {
+                try {
+                    parentView.disconnect(this._extension._viewLoadedConnections.get(parentView));
+                } catch (e) {}
+                this._extension._viewLoadedConnections.delete(parentView);
+            }
+
+            const viewLoadedId = parentView.connect('view-loaded', () => {
+                try {
+                    parentView.disconnect(viewLoadedId);
+                } catch (e) {}
+                this._extension._viewLoadedConnections.delete(parentView);
 
                 if (!this._extension._enabled)
                     return;
@@ -148,6 +157,7 @@ export default class UngroupFolderExtension extends Extension {
         this._checkOverlays = new Map();
         this._emptySpaceAnchor = null;
         this._folderIconSignals = new Map();
+        this._viewLoadedConnections = new Map();
         this._enabled = true;
 
         const self = this;
@@ -543,6 +553,13 @@ export default class UngroupFolderExtension extends Extension {
             } catch (e) {}
         }
         this._folderIconSignals.clear();
+
+        for (const [parentView, handlerId] of this._viewLoadedConnections) {
+            try {
+                parentView.disconnect(handlerId);
+            } catch (e) {}
+        }
+        this._viewLoadedConnections.clear();
 
         FolderIcon.prototype._init = this._origInit;
 
