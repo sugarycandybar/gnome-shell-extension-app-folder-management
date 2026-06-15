@@ -156,6 +156,8 @@ export default class UngroupFolderExtension extends Extension {
         this._selectedApps = new Set();
         this._checkOverlays = new Map();
         this._emptySpaceAnchor = null;
+        this._emptySpaceMenu = null;
+        this._emptySpaceMenuOpenId = 0;
         this._folderIconSignals = new Map();
         this._viewLoadedConnections = new Map();
         this._enabled = true;
@@ -176,7 +178,7 @@ export default class UngroupFolderExtension extends Extension {
         FolderIcon.prototype.popupMenu = function () {
             if (!this._menu) {
                 this._menu = new FolderPopupMenu(this, self);
-                this._menu.connect('open-state-changed', (menu, open) => {
+                this._openStateChangedId = this._menu.connect('open-state-changed', (menu, open) => {
                     if (!open)
                         this._onFolderMenuPoppedDown();
                 });
@@ -502,6 +504,10 @@ export default class UngroupFolderExtension extends Extension {
             this._emptySpaceAnchor.destroy();
             this._emptySpaceAnchor = null;
         }
+        if (this._emptySpaceMenu) {
+            this._emptySpaceMenu.actor.destroy();
+            this._emptySpaceMenu = null;
+        }
 
         const [stageX, stageY] = event.get_coords();
 
@@ -521,12 +527,16 @@ export default class UngroupFolderExtension extends Extension {
             this._enterSelectMode();
         });
 
-        menu.connect('open-state-changed', (m, open) => {
+        this._emptySpaceMenuOpenId = menu.connect('open-state-changed', (m, open) => {
             if (!open) {
                 anchor.destroy();
                 m.actor.destroy();
                 if (this._emptySpaceAnchor === anchor)
                     this._emptySpaceAnchor = null;
+                if (this._emptySpaceMenu === m) {
+                    this._emptySpaceMenu = null;
+                    this._emptySpaceMenuOpenId = 0;
+                }
             }
         });
 
@@ -534,6 +544,7 @@ export default class UngroupFolderExtension extends Extension {
         const menuManager = new PopupMenu.PopupMenuManager(anchor);
         menuManager.addMenu(menu);
 
+        this._emptySpaceMenu = menu;
         menu.open(BoxPointer.PopupAnimation.FULL);
     }
 
@@ -543,6 +554,10 @@ export default class UngroupFolderExtension extends Extension {
         for (const [icon, handlerId] of this._folderIconSignals) {
             if (icon._menu) {
                 Main.overview.disconnectObject(icon._menu);
+                if (icon._openStateChangedId) {
+                    icon._menu.disconnect(icon._openStateChangedId);
+                    icon._openStateChangedId = 0;
+                }
                 icon._menu.actor.destroy();
                 icon._menu = null;
                 icon._menuManager = null;
@@ -601,6 +616,14 @@ export default class UngroupFolderExtension extends Extension {
         if (this._dashAllocId && Main.overview?.controls?.dash) {
             Main.overview.controls.dash.disconnect(this._dashAllocId);
             this._dashAllocId = 0;
+        }
+
+        if (this._emptySpaceMenu) {
+            if (this._emptySpaceMenuOpenId)
+                this._emptySpaceMenu.disconnect(this._emptySpaceMenuOpenId);
+            this._emptySpaceMenu.actor.destroy();
+            this._emptySpaceMenu = null;
+            this._emptySpaceMenuOpenId = 0;
         }
 
         if (this._emptySpaceAnchor) {
