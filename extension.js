@@ -24,7 +24,6 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
 
         super(sourceActor, 0.5, side);
         this.actor.add_style_class_name('app-menu');
-
         this._extension = extension;
 
         this.addAction(_('Ungroup Folder'), () => {
@@ -45,19 +44,7 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
         if (!this._extension._enabled)
             return;
 
-        const _removeFolderFromList = () => {
-            const settings = new Gio.Settings({
-                schema_id: 'org.gnome.desktop.app-folders',
-            });
-            const folders = settings.get_strv('folder-children');
-            const idx = folders.indexOf(folderId);
-            if (idx >= 0) {
-                folders.splice(idx, 1);
-                settings.set_strv('folder-children', folders);
-            }
-        };
-
-        const onAnimDone = () => {
+        const completeUngroup = () => {
             if (!this._extension._enabled)
                 return;
 
@@ -66,52 +53,7 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
             if (folderPos[0] >= 0)
                 folderPage = folderPos[0];
 
-            if (this._extension._viewLoadedConnections.has(parentView)) {
-                try {
-                    parentView.disconnect(this._extension._viewLoadedConnections.get(parentView));
-                } catch (e) {}
-                this._extension._viewLoadedConnections.delete(parentView);
-            }
-
-            const viewLoadedId = parentView.connect('view-loaded', () => {
-                try {
-                    parentView.disconnect(viewLoadedId);
-                } catch (e) {}
-                this._extension._viewLoadedConnections.delete(parentView);
-
-                if (!this._extension._enabled)
-                    return;
-
-                const existingCount = parentView._grid.getItemsAtPage(folderPage)
-                    .filter(c => c.visible).length;
-
-                appIds.forEach((appId, i) => {
-                    const appIcon = parentView._items.get(appId);
-                    if (!appIcon)
-                        return;
-
-                    parentView._moveItem(appIcon, folderPage, existingCount + i);
-                });
-
-                parentView._savePages();
-
-                appIds.forEach((appId, i) => {
-                    const appIcon = parentView._items.get(appId);
-                    if (!appIcon)
-                        return;
-
-                    appIcon.scale_x = 0;
-                    appIcon.scale_y = 0;
-
-                    appIcon.ease({
-                        scale_x: 1,
-                        scale_y: 1,
-                        delay: i * CASCADE_INTERVAL,
-                        duration: CASCADE_DURATION,
-                        mode: Clutter.AnimationMode.EASE_OUT_QUINT,
-                    });
-                });
-            });
+            this._connectViewLoaded(parentView, folderPage, appIds);
         };
 
         if (icon.visible) {
@@ -131,8 +73,8 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
                     folderSettings.reset('name');
                     folderSettings.reset('translate');
 
-                    _removeFolderFromList();
-                    onAnimDone();
+                    this._removeFromFolderList(folderId);
+                    completeUngroup();
                 },
             });
         } else {
@@ -140,17 +82,93 @@ class FolderPopupMenu extends PopupMenu.PopupMenu {
             for (const key of keys)
                 folderSettings.reset(key);
 
-            _removeFolderFromList();
-            onAnimDone();
+            this._removeFromFolderList(folderId);
+            completeUngroup();
         }
+    }
+
+    _removeFromFolderList(folderId) {
+        const settings = new Gio.Settings({
+            schema_id: 'org.gnome.desktop.app-folders',
+        });
+        const folders = settings.get_strv('folder-children');
+        const idx = folders.indexOf(folderId);
+        if (idx >= 0) {
+            folders.splice(idx, 1);
+            settings.set_strv('folder-children', folders);
+        }
+    }
+
+    _connectViewLoaded(parentView, folderPage, appIds) {
+        if (this._extension._viewLoadedConnections.has(parentView)) {
+            try {
+                parentView.disconnect(
+                    this._extension._viewLoadedConnections.get(parentView));
+            } catch (e) {}
+            this._extension._viewLoadedConnections.delete(parentView);
+        }
+
+        const viewLoadedId = parentView.connect('view-loaded', () => {
+            try {
+                parentView.disconnect(viewLoadedId);
+            } catch (e) {}
+            this._extension._viewLoadedConnections.delete(parentView);
+
+            if (!this._extension._enabled)
+                return;
+
+            const existingCount = parentView._grid.getItemsAtPage(folderPage)
+                .filter(c => c.visible).length;
+
+            appIds.forEach((appId, i) => {
+                const appIcon = parentView._items.get(appId);
+                if (!appIcon)
+                    return;
+
+                parentView._moveItem(appIcon, folderPage, existingCount + i);
+            });
+
+            parentView._savePages();
+
+            appIds.forEach((appId, i) => {
+                const appIcon = parentView._items.get(appId);
+                if (!appIcon)
+                    return;
+
+                appIcon.scale_x = 0;
+                appIcon.scale_y = 0;
+
+                appIcon.ease({
+                    scale_x: 1,
+                    scale_y: 1,
+                    delay: i * CASCADE_INTERVAL,
+                    duration: CASCADE_DURATION,
+                    mode: Clutter.AnimationMode.EASE_OUT_QUINT,
+                });
+            });
+        });
+
+        this._extension._viewLoadedConnections.set(parentView, viewLoadedId);
     }
 }
 
 export default class UngroupFolderExtension extends Extension {
     enable() {
+        this._saveOriginals();
+        this._initState();
+        this._patchFolderIcon();
+        this._patchPopupMenu();
+        this._createSelectBar();
+        this._connectSignals();
+    }
+
+    _saveOriginals() {
         this._origInit = FolderIcon.prototype._init;
         this._origPopupMenu = FolderIcon.prototype.popupMenu;
         this._origOnPoppedDown = FolderIcon.prototype._onFolderMenuPoppedDown;
+    }
+
+    _initState() {
         this._selectMode = false;
         this._appDisplay = null;
         this._selectedApps = new Set();
@@ -160,8 +178,11 @@ export default class UngroupFolderExtension extends Extension {
         this._emptySpaceMenuOpenId = 0;
         this._folderIconSignals = new Map();
         this._viewLoadedConnections = new Map();
+        this._groupAnimIcons = null;
         this._enabled = true;
+    }
 
+    _patchFolderIcon() {
         const self = this;
         FolderIcon.prototype._init = function (id, path, parentView) {
             self._origInit.call(this, id, path, parentView);
@@ -174,14 +195,18 @@ export default class UngroupFolderExtension extends Extension {
             });
             self._folderIconSignals.set(this, handlerId);
         };
+    }
 
+    _patchPopupMenu() {
+        const self = this;
         FolderIcon.prototype.popupMenu = function () {
             if (!this._menu) {
                 this._menu = new FolderPopupMenu(this, self);
-                this._openStateChangedId = this._menu.connect('open-state-changed', (menu, open) => {
-                    if (!open)
-                        this._onFolderMenuPoppedDown();
-                });
+                this._openStateChangedId = this._menu.connect(
+                    'open-state-changed', (menu, open) => {
+                        if (!open)
+                            this._onFolderMenuPoppedDown();
+                    });
                 Main.uiGroup.add_child(this._menu.actor);
                 this._menuManager = new PopupMenu.PopupMenuManager(this);
                 this._menuManager.addMenu(this._menu);
@@ -195,17 +220,18 @@ export default class UngroupFolderExtension extends Extension {
 
         FolderIcon.prototype._onFolderMenuPoppedDown = function () {
         };
+    }
 
+    _createSelectBar() {
         this._selectBar = new St.BoxLayout({
-            style: 'background-color: rgba(0, 0, 0, 0.7); border-radius: 12px; ' +
-                'padding: 8px 16px; spacing: 12px;',
+            style_class: 'app-folder-management-select-bar',
             visible: false,
             reactive: true,
         });
 
         this._selectCountLabel = new St.Label({
             text: '',
-            style: 'color: white; font-weight: bold;',
+            style_class: 'app-folder-management-select-count',
             y_align: Clutter.ActorAlign.CENTER,
         });
 
@@ -224,14 +250,17 @@ export default class UngroupFolderExtension extends Extension {
             style_class: 'button',
             track_hover: true,
         });
-        this._cancelButtonClickedId = this._cancelButton.connect('clicked', () => this._exitSelectMode());
+        this._cancelButtonClickedId = this._cancelButton.connect(
+            'clicked', () => this._exitSelectMode());
 
         this._selectBar.add_child(this._selectCountLabel);
         this._selectBar.add_child(new St.Widget({x_expand: true}));
         this._selectBar.add_child(this._groupButton);
         this._selectBar.add_child(this._cancelButton);
         Main.uiGroup.add_child(this._selectBar);
+    }
 
+    _connectSignals() {
         const dash = Main.overview?.controls?.dash;
         if (dash) {
             this._dashAllocId = dash.connect('notify::allocation', () => {
@@ -257,9 +286,8 @@ export default class UngroupFolderExtension extends Extension {
                 return Clutter.EVENT_PROPAGATE;
 
             for (let icon = target; icon; icon = icon.get_parent()) {
-                if (icon instanceof FolderIcon) {
+                if (icon instanceof FolderIcon)
                     return Clutter.EVENT_STOP;
-                }
                 if (icon instanceof AppIcon) {
                     this._toggleApp(icon);
                     return Clutter.EVENT_STOP;
@@ -307,24 +335,6 @@ export default class UngroupFolderExtension extends Extension {
             });
     }
 
-    _getAppDisplay() {
-        if (this._appDisplay)
-            return this._appDisplay;
-        return null;
-    }
-
-    _findAppDisplayFromIcon(appIcon) {
-        let p = appIcon.get_parent();
-        while (p) {
-            if (p instanceof AppDisplay.AppDisplay) {
-                this._appDisplay = p;
-                return true;
-            }
-            p = p.get_parent();
-        }
-        return false;
-    }
-
     _positionSelectBar() {
         const barWidth = 500;
         const stageWidth = global.stage.get_width();
@@ -341,7 +351,8 @@ export default class UngroupFolderExtension extends Extension {
         this._selectMode = true;
         this._selectedApps.clear();
         this._groupButton.reactive = false;
-        this._selectCountLabel.text = ngettext('Selected %d app', 'Selected %d apps', 0).format(0);
+        this._selectCountLabel.text = ngettext(
+            'Selected %d app', 'Selected %d apps', 0).format(0);
         this._positionSelectBar();
         this._selectBar.set_opacity(0);
         this._selectBar.set_translation(0, 12, 0);
@@ -391,7 +402,9 @@ export default class UngroupFolderExtension extends Extension {
         }
 
         this._groupButton.reactive = this._selectedApps.size >= 1;
-        this._selectCountLabel.text = ngettext('Selected %d app', 'Selected %d apps', this._selectedApps.size).format(this._selectedApps.size);
+        this._selectCountLabel.text = ngettext(
+            'Selected %d app', 'Selected %d apps',
+            this._selectedApps.size).format(this._selectedApps.size);
     }
 
     _addCheckOverlay(appIcon, appId) {
@@ -400,9 +413,7 @@ export default class UngroupFolderExtension extends Extension {
 
         const overlay = new St.Bin({
             reactive: false,
-            style: 'background-color: -st-accent-color; ' +
-                'border-radius: 999px; ' +
-                'box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);',
+            style_class: 'app-folder-management-check-overlay',
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });
@@ -410,7 +421,7 @@ export default class UngroupFolderExtension extends Extension {
 
         const icon = new St.Icon({
             icon_name: 'object-select-symbolic',
-            style: 'color: -st-accent-fg-color;',
+            style_class: 'app-folder-management-check-icon',
             icon_size: 16,
         });
         overlay.child = icon;
@@ -441,7 +452,7 @@ export default class UngroupFolderExtension extends Extension {
         if (this._selectedApps.size < 1)
             return;
 
-        const appDisplay = this._getAppDisplay();
+        const appDisplay = this._appDisplay;
 
         if (!appDisplay)
             return;
@@ -458,9 +469,10 @@ export default class UngroupFolderExtension extends Extension {
         for (const appId of appIds)
             this._removeCheckOverlay(appId);
 
-        const self = this;
+        this._groupAnimIcons = appIcons;
+
         const onAnimDone = () => {
-            if (!self._enabled)
+            if (!this._enabled)
                 return;
 
             for (const icon of appIcons) {
@@ -468,12 +480,13 @@ export default class UngroupFolderExtension extends Extension {
                 icon.opacity = 255;
             }
 
-            self._exitSelectMode();
+            this._groupAnimIcons = null;
+            this._exitSelectMode();
 
             try {
                 appDisplay.createFolder(appIds);
             } catch (e) {
-                self.log(`createFolder error: ${e}`);
+                this.log(`createFolder error: ${e}`);
             }
         };
 
@@ -497,6 +510,18 @@ export default class UngroupFolderExtension extends Extension {
         } else {
             onAnimDone();
         }
+    }
+
+    _findAppDisplayFromIcon(appIcon) {
+        let p = appIcon.get_parent();
+        while (p) {
+            if (p instanceof AppDisplay.AppDisplay) {
+                this._appDisplay = p;
+                return true;
+            }
+            p = p.get_parent();
+        }
+        return false;
     }
 
     _showEmptySpaceMenu(event) {
@@ -563,6 +588,8 @@ export default class UngroupFolderExtension extends Extension {
                 icon._menuManager = null;
             }
             icon.disconnect(handlerId);
+            icon.set_scale(1, 1);
+            icon.opacity = 255;
         }
         this._folderIconSignals.clear();
 
@@ -598,6 +625,14 @@ export default class UngroupFolderExtension extends Extension {
         this._exitSelectMode();
         for (const appId of this._checkOverlays.keys())
             this._removeCheckOverlay(appId);
+
+        if (this._groupAnimIcons) {
+            for (const icon of this._groupAnimIcons) {
+                icon.set_scale(1, 1);
+                icon.opacity = 255;
+            }
+            this._groupAnimIcons = null;
+        }
 
         if (this._groupButton && this._groupButtonClickedId) {
             this._groupButton.disconnect(this._groupButtonClickedId);

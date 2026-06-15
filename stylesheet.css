@@ -1,0 +1,21 @@
+.app-folder-management-select-bar {
+    background-color: rgba(0, 0, 0, 0.7);
+    border-radius: 12px;
+    padding: 8px 16px;
+    spacing: 12px;
+}
+
+.app-folder-management-select-count {
+    color: white;
+    font-weight: bold;
+}
+
+.app-folder-management-check-overlay {
+    background-color: -st-accent-color;
+    border-radius: 999px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.app-folder-management-check-icon {
+    color: -st-accent-fg-color;
+}
