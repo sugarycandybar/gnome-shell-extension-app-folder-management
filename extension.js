@@ -350,7 +350,6 @@ export default class UngroupFolderExtension extends Extension {
     _enterSelectMode() {
         this._selectMode = true;
         this._selectedApps.clear();
-        this._groupButton.reactive = false;
         this._selectCountLabel.text = ngettext(
             'Selected %d app', 'Selected %d apps', 0).format(0);
         this._positionSelectBar();
@@ -394,7 +393,6 @@ export default class UngroupFolderExtension extends Extension {
         if (this._selectedApps.has(appId)) {
             this._selectedApps.delete(appId);
             this._removeCheckOverlay(appId);
-            appIcon.setForcedHighlight(false);
         } else {
             this._selectedApps.add(appId);
             appIcon.setForcedHighlight(true);
@@ -452,11 +450,6 @@ export default class UngroupFolderExtension extends Extension {
         if (this._selectedApps.size < 1)
             return;
 
-        const appDisplay = this._appDisplay;
-
-        if (!appDisplay)
-            return;
-
         const appIds = [...this._selectedApps];
 
         const appIcons = [];
@@ -470,6 +463,13 @@ export default class UngroupFolderExtension extends Extension {
             this._removeCheckOverlay(appId);
 
         this._groupAnimIcons = appIcons;
+
+        this._appDisplay = null;
+        if (appIcons.length > 0)
+            this._findAppDisplayFromIcon(appIcons[0]);
+        const appDisplay = this._appDisplay;
+        if (!appDisplay)
+            return;
 
         const onAnimDone = () => {
             if (!this._enabled)
@@ -598,16 +598,8 @@ export default class UngroupFolderExtension extends Extension {
         this._viewLoadedConnections.clear();
 
         FolderIcon.prototype._init = this._origInit;
-
-        if (this._origPopupMenu)
-            FolderIcon.prototype.popupMenu = this._origPopupMenu;
-        else
-            delete FolderIcon.prototype.popupMenu;
-
-        if (this._origOnPoppedDown)
-            FolderIcon.prototype._onFolderMenuPoppedDown = this._origOnPoppedDown;
-        else
-            delete FolderIcon.prototype._onFolderMenuPoppedDown;
+        FolderIcon.prototype.popupMenu = this._origPopupMenu;
+        FolderIcon.prototype._onFolderMenuPoppedDown = this._origOnPoppedDown;
 
         if (this._stageHandlerId) {
             global.stage.disconnect(this._stageHandlerId);
@@ -623,8 +615,6 @@ export default class UngroupFolderExtension extends Extension {
         }
 
         this._exitSelectMode();
-        for (const appId of this._checkOverlays.keys())
-            this._removeCheckOverlay(appId);
 
         if (this._groupAnimIcons) {
             for (const icon of this._groupAnimIcons) {
@@ -647,9 +637,6 @@ export default class UngroupFolderExtension extends Extension {
             this._selectBar.destroy();
             this._selectBar = null;
         }
-        this._selectCountLabel = null;
-        this._groupButton = null;
-        this._cancelButton = null;
 
         if (this._dashAllocId && Main.overview?.controls?.dash) {
             Main.overview.controls.dash.disconnect(this._dashAllocId);

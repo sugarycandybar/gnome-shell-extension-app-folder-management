@@ -6,8 +6,8 @@ Adds easy app folder management directly from the GNOME Shell app grid.
 
 ## Features
 
-- **Ungroup folders** — Right-click any folder in the app grid to ungroup it.
-- **Create folders** — Right-click empty grid space, select apps, then group them into a new folder.
+- **Ungroup folders** - Right-click any folder in the app grid to ungroup it.
+- **Create folders** - Right-click empty grid space, select apps, then group them into a new folder.
 
 ## Screenshots
 
